@@ -1,1 +1,539 @@
+<!DOCTYPE html>
+<html lang="ru">
 
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DOCX/PDF Summarizer — Лягушка-Конвертер</title>
+    <meta name="description"
+        content="Конвертируйте DOCX и PDF в TXT и получайте суммаризацию с помощью Qwen AI. До 20 файлов за раз.">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg: #0d1117;
+            --surface: #161b22;
+            --surface2: #1e2632;
+            --border: #30363d;
+            --accent: #3fb950;
+            --accent2: #58a6ff;
+            --accent-glow: rgba(63, 185, 80, 0.25);
+            --text: #e6edf3;
+            --text-muted: #8b949e;
+            --danger: #f85149;
+            --warn: #d29922;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Inter', system-ui, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 24px 16px;
+        }
+
+        /* Background grid effect */
+        body::before {
+            content: '';
+            position: fixed;
+            inset: 0;
+            background-image:
+                linear-gradient(rgba(63, 185, 80, 0.03) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(63, 185, 80, 0.03) 1px, transparent 1px);
+            background-size: 40px 40px;
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        .wrapper {
+            position: relative;
+            z-index: 1;
+            width: 100%;
+            max-width: 620px;
+        }
+
+        /* Header */
+        .header {
+            text-align: center;
+            margin-bottom: 32px;
+        }
+
+        .header h1 {
+            font-size: 28px;
+            font-weight: 700;
+            letter-spacing: -0.5px;
+            background: linear-gradient(135deg, var(--accent), var(--accent2));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .header p {
+            margin-top: 8px;
+            color: var(--text-muted);
+            font-size: 14px;
+        }
+
+        /* Main card */
+        .card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 32px;
+            box-shadow: 0 8px 40px rgba(0, 0, 0, 0.5);
+        }
+
+        /* Drop zone */
+        .dropzone {
+            border: 2px dashed var(--border);
+            border-radius: 12px;
+            padding: 36px 20px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.25s ease;
+            background: var(--surface2);
+            position: relative;
+        }
+
+        .dropzone.dragover {
+            border-color: var(--accent);
+            background: rgba(63, 185, 80, 0.07);
+            box-shadow: 0 0 0 4px var(--accent-glow);
+        }
+
+        .dropzone-icon {
+            font-size: 36px;
+            margin-bottom: 10px;
+            display: block;
+        }
+
+        .dropzone-label {
+            font-size: 15px;
+            font-weight: 600;
+            color: var(--text);
+            margin-bottom: 4px;
+        }
+
+        .dropzone-hint {
+            font-size: 13px;
+            color: var(--text-muted);
+        }
+
+        input[type="file"] {
+            display: none;
+        }
+
+        /* File badge */
+        #fileBadge {
+            display: none;
+            margin-top: 12px;
+            padding: 8px 14px;
+            background: rgba(63, 185, 80, 0.12);
+            border: 1px solid rgba(63, 185, 80, 0.3);
+            border-radius: 8px;
+            font-size: 13px;
+            color: var(--accent);
+            font-weight: 500;
+        }
+
+        /* Frog + buttons row */
+        .action-row {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            margin-top: 20px;
+        }
+
+        .frog-wrap {
+            flex-shrink: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .frog-wrap img {
+            width: 88px;
+            height: 88px;
+            object-fit: contain;
+            filter: drop-shadow(0 4px 16px rgba(63, 185, 80, 0.35));
+            animation: frogBob 3s ease-in-out infinite;
+            transform-origin: bottom center;
+        }
+
+        @keyframes frogBob {
+
+            0%,
+            100% {
+                transform: translateY(0) rotate(-2deg);
+            }
+
+            50% {
+                transform: translateY(-8px) rotate(2deg);
+            }
+        }
+
+        .buttons {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            flex: 1;
+        }
+
+        .btn {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            border: none;
+            border-radius: 10px;
+            padding: 13px 20px;
+            font-size: 15px;
+            font-weight: 600;
+            font-family: inherit;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .btn::after {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: white;
+            opacity: 0;
+            transition: opacity 0.15s;
+        }
+
+        .btn:active::after {
+            opacity: 0.08;
+        }
+
+        .btn-convert {
+            background: linear-gradient(135deg, #238636, #2ea043);
+            color: #fff;
+            box-shadow: 0 2px 12px rgba(63, 185, 80, 0.3);
+        }
+
+        .btn-convert:hover:not(:disabled) {
+            box-shadow: 0 4px 20px rgba(63, 185, 80, 0.5);
+            transform: translateY(-1px);
+        }
+
+        .btn-summarize {
+            background: linear-gradient(135deg, #1a4f9f, #2d7dd2);
+            color: #fff;
+            box-shadow: 0 2px 12px rgba(88, 166, 255, 0.25);
+        }
+
+        .btn-summarize:hover:not(:disabled) {
+            box-shadow: 0 4px 20px rgba(88, 166, 255, 0.4);
+            transform: translateY(-1px);
+        }
+
+        .btn:disabled {
+            opacity: 0.38;
+            cursor: not-allowed;
+            transform: none !important;
+            box-shadow: none !important;
+        }
+
+        /* Progress bar */
+        .progress-wrap {
+            margin-top: 20px;
+            display: none;
+        }
+
+        .progress-label {
+            font-size: 13px;
+            color: var(--text-muted);
+            margin-bottom: 8px;
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .progress-bar-track {
+            height: 4px;
+            background: var(--border);
+            border-radius: 4px;
+            overflow: hidden;
+        }
+
+        .progress-bar-fill {
+            height: 100%;
+            background: linear-gradient(90deg, var(--accent), var(--accent2));
+            width: 0%;
+            border-radius: 4px;
+            transition: width 0.4s ease;
+            position: relative;
+        }
+
+        .progress-bar-fill.indeterminate {
+            width: 40%;
+            animation: indeterminate 1.4s ease-in-out infinite;
+        }
+
+        @keyframes indeterminate {
+            0% {
+                transform: translateX(-100%);
+            }
+
+            100% {
+                transform: translateX(350%);
+            }
+        }
+
+        /* Log */
+        #log {
+            margin-top: 20px;
+            display: none;
+            background: #0d1117;
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 14px;
+            max-height: 200px;
+            overflow-y: auto;
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+            line-height: 1.6;
+        }
+
+        .log-info {
+            color: var(--accent2);
+        }
+
+        .log-success {
+            color: var(--accent);
+        }
+
+        .log-error {
+            color: var(--danger);
+        }
+
+        .log-warn {
+            color: var(--warn);
+        }
+
+        #log::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        #log::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        #log::-webkit-scrollbar-thumb {
+            background: var(--border);
+            border-radius: 3px;
+        }
+
+        /* Footer */
+        .footer {
+            margin-top: 24px;
+            text-align: center;
+            font-size: 12px;
+            color: var(--text-muted);
+        }
+    </style>
+</head>
+
+<body>
+    <div class="wrapper">
+
+        <header class="header">
+            <h1>🐸 DOCX/PDF Summarizer</h1>
+            <p>Конвертация DOCX и PDF в TXT, суммаризация через Qwen AI · до 20 файлов</p>
+        </header>
+
+        <div class="card">
+            <!-- Drop zone -->
+            <label class="dropzone" id="dropzone" for="fileInput">
+                <span class="dropzone-icon">📂</span>
+                <div class="dropzone-label">Перетащите файлы DOCX или PDF, или нажмите для выбора</div>
+                <div class="dropzone-hint">До 20 файлов, максимум 10 МБ каждый</div>
+                <input type="file" id="fileInput" accept=".docx,.pdf" multiple>
+            </label>
+            <div id="fileBadge">Выбрано файлов: <span id="fileCount">0</span></div>
+
+            <!-- Frog + action buttons -->
+            <div class="action-row">
+                <div class="frog-wrap">
+                    <img src="/static/frog.png" alt="Лягушка-маскот" id="frogImg">
+                </div>
+                <div class="buttons">
+                    <button class="btn btn-convert" id="convertBtn" disabled>📄 Конвертировать → ZIP</button>
+                    <button class="btn btn-summarize" id="summarizeBtn" disabled>✨ Суммаризировать → CSV</button>
+                </div>
+            </div>
+
+            <!-- Progress -->
+            <div class="progress-wrap" id="progressWrap">
+                <div class="progress-label">
+                    <span id="progressText">Обработка…</span>
+                </div>
+                <div class="progress-bar-track">
+                    <div class="progress-bar-fill indeterminate" id="progressFill"></div>
+                </div>
+            </div>
+
+            <!-- Log -->
+            <div id="log"></div>
+        </div>
+
+        <div class="footer">Powered by Qwen3-Omni-Flash · FastAPI · python-docx · pdfplumber</div>
+    </div>
+
+    <script>
+        const fileInput = document.getElementById('fileInput');
+        const dropzone = document.getElementById('dropzone');
+        const fileBadge = document.getElementById('fileBadge');
+        const fileCount = document.getElementById('fileCount');
+        const convertBtn = document.getElementById('convertBtn');
+        const summarizeBtn = document.getElementById('summarizeBtn');
+        const logEl = document.getElementById('log');
+        const progressWrap = document.getElementById('progressWrap');
+        const progressFill = document.getElementById('progressFill');
+        const progressText = document.getElementById('progressText');
+        const frogImg = document.getElementById('frogImg');
+
+        let selectedFiles = [];
+
+        // ── File selection ──────────────────────────────────────────────────────
+        fileInput.addEventListener('change', e => handleFiles(Array.from(e.target.files)));
+
+        dropzone.addEventListener('dragover', e => { e.preventDefault(); dropzone.classList.add('dragover'); });
+        dropzone.addEventListener('dragleave', () => dropzone.classList.remove('dragover'));
+        dropzone.addEventListener('drop', e => {
+            e.preventDefault();
+            dropzone.classList.remove('dragover');
+            handleFiles(Array.from(e.dataTransfer.files).filter(f => {
+                const name = f.name.toLowerCase();
+                return name.endsWith('.docx') || name.endsWith('.pdf');
+            }));
+        });
+
+        function handleFiles(files) {
+            if (files.length === 0) return;
+            if (files.length > 20) {
+                log('⚠ Можно выбрать не более 20 файлов. Будут обработаны первые 20.', 'warn');
+                files = files.slice(0, 20);
+            }
+            selectedFiles = files;
+            fileCount.textContent = selectedFiles.length;
+            fileBadge.style.display = 'block';
+            convertBtn.disabled = false;
+            summarizeBtn.disabled = false;
+            clearLog();
+        }
+
+        // ── Logging ─────────────────────────────────────────────────────────────
+        function log(msg, type = 'info') {
+            logEl.style.display = 'block';
+            const div = document.createElement('div');
+            div.textContent = msg;
+            div.className = 'log-' + type;
+            logEl.appendChild(div);
+            logEl.scrollTop = logEl.scrollHeight;
+        }
+        function clearLog() {
+            logEl.innerHTML = '';
+            logEl.style.display = 'none';
+        }
+
+        // ── Progress ─────────────────────────────────────────────────────────────
+        function showProgress(label) {
+            progressText.textContent = label;
+            progressFill.classList.add('indeterminate');
+            progressWrap.style.display = 'block';
+        }
+        function hideProgress() {
+            progressWrap.style.display = 'none';
+            progressFill.classList.remove('indeterminate');
+        }
+
+        // ── Frog excitement ───────────────────────────────────────────────────────
+        function exciteFrog() {
+            frogImg.style.animation = 'none';
+            frogImg.style.transform = 'scale(1.15) rotate(10deg)';
+            setTimeout(() => {
+                frogImg.style.transform = '';
+                frogImg.style.animation = '';
+            }, 400);
+        }
+
+        // ── Lock / unlock UI ─────────────────────────────────────────────────────
+        function lockUI() {
+            convertBtn.disabled = true;
+            summarizeBtn.disabled = true;
+            dropzone.style.pointerEvents = 'none';
+        }
+        function unlockUI() {
+            const hasFiles = selectedFiles.length > 0;
+            convertBtn.disabled = !hasFiles;
+            summarizeBtn.disabled = !hasFiles;
+            dropzone.style.pointerEvents = '';
+        }
+
+        // ── Download helper ───────────────────────────────────────────────────────
+        function downloadBlob(blob, filename) {
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
+
+        // ── POST with files ───────────────────────────────────────────────────────
+        async function postFiles(endpoint, outputFilename, loadingLabel) {
+            if (selectedFiles.length === 0) return;
+            lockUI();
+            clearLog();
+            showProgress(loadingLabel);
+            log(`▶ Отправка ${selectedFiles.length} файл(ов) на сервер…`, 'info');
+
+            const form = new FormData();
+            for (const f of selectedFiles) form.append('files', f, f.name);
+
+            try {
+                const resp = await fetch(endpoint, { method: 'POST', body: form });
+                if (!resp.ok) {
+                    const err = await resp.json().catch(() => ({ detail: resp.statusText }));
+                    throw new Error(err.detail || resp.statusText);
+                }
+                const blob = await resp.blob();
+                downloadBlob(blob, outputFilename);
+                exciteFrog();
+                log(`✅ Готово! Файл ${outputFilename} скачан.`, 'success');
+            } catch (e) {
+                log(`❌ Ошибка: ${e.message}`, 'error');
+            } finally {
+                hideProgress();
+                unlockUI();
+            }
+        }
+
+        // ── Button handlers ───────────────────────────────────────────────────────
+        convertBtn.addEventListener('click', () =>
+            postFiles('/convert', 'converted_txts.zip', 'Конвертирование DOCX → TXT…')
+        );
+
+        summarizeBtn.addEventListener('click', () =>
+            postFiles('/summarize', 'summaries.csv', 'Суммаризация через Qwen AI… (обычно ~15–30 с)')
+        );
+    </script>
+</body>
+
+</html>
