@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Конвертер DOCX в TXT</title>
+    <!-- Подключаем библиотеки -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <style>
+        :root {
+            --primary-color: #0056b3;
+            --bg-color: #f8f9fa;
+        }
+        * { box-sizing: border-box; }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--bg-color);
+            color: #333;
+            max-width: 700px;
+            margin: 40px auto;
+            padding: 20px;
+        }
+        .container {
+            background: white;
+            padding: 40px 30px;
+            border-radius: 12px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+            text-align: center;
+        }
+        h1 {
+            font-size: 26px;
+            margin-top: 0;
+            margin-bottom: 15px;
+            color: var(--primary-color);
+        }
+        .description {
+            margin-bottom: 25px;
+            font-size: 15px;
+            color: #666;
+            line-height: 1.5;
+        }
+        .file-upload {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            border: 2px dashed #0056b3;
+            padding: 40px 20px;
+            border-radius: 10px;
+            background-color: #f1f7fd;
+            margin-bottom: 25px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        .file-upload:hover {
+            background-color: #e3f0fc;
+            border-color: #004494;
+        }
+        input[type="file"] { display: none; }
+        .custom-file-upload {
+            font-size: 18px;
+            font-weight: bold;
+            color: var(--primary-color);
+            margin-bottom: 10px;
+        }
+        #fileCount {
+            font-size: 14px;
+            color: #555;
+            background: #fff;
+            padding: 5px 15px;
+            border-radius: 20px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+        }
+        .btn {
+            background-color: var(--primary-color);
+            color: white;
+            border: none;
+            padding: 14px 24px;
+            font-size: 16px;
+            font-weight: bold;
+            border-radius: 8px;
+            cursor: pointer;
+            width: 100%;
+            transition: background 0.3s, opacity 0.3s;
+        }
+        .btn:hover:not(:disabled) { background-color: #004494; }
+        .btn:disabled {
+            background-color: #b3cce6;
+            cursor: not-allowed;
+        }
+        #log {
+            text-align: left;
+            margin-top: 25px;
+            font-size: 14px;
+            background: #2b2b2b;
+            color: #ddd;
+            padding: 15px;
+            border-radius: 8px;
+            height: 200px;
+            overflow-y: auto;
+            display: none;
+            font-family: 'Courier New', Courier, monospace;
+        }
+        .log-entry { margin-bottom: 6px; border-bottom: 1px solid #333; padding-bottom: 2px; }
+        .success { color: #4ade80; }
+        .error { color: #f87171; }
+        .info { color: #60a5fa; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>Конвертер DOCX в TXT</h1>
+    <p class="description">
+        Выберите до 20 файлов DOCX. <br>
+        Если ваш браузер поддерживает прямой доступ (Chrome/Edge), вам предложат выбрать папку для сохранения. 
+        В ином случае (Firefox/Safari) файлы скачаются архивом.
+    </p>
+
+    <label class="file-upload" for="fileInput">
+        <span class="custom-file-upload">📂 Выбрать файлы DOCX</span>
+        <div id="fileCount">Файлы не выбраны</div>
+        <input type="file" id="fileInput" accept=".docx" multiple>
+    </label>
+
+    <button id="convertBtn" class="btn" disabled>Конвертировать и сохранить</button>
+
+    <div id="log"></div>
+</div>
+
+<script>
+    const fileInput = document.getElementById('fileInput');
+    const convertBtn = document.getElementById('convertBtn');
+    const fileCountLabel = document.getElementById('fileCount');
+    const logArea = document.getElementById('log');
+
+    let selectedFiles = [];
+
+    // Обработка выбора файлов
+    fileInput.addEventListener('change', (e) => {
+        selectedFiles = Array.from(e.target.files);
+        
+        // Ограничение до 20 файлов
+        if (selectedFiles.length > 20) {
+            alert('Можно загрузить не более 20 файлов одновременно. Будут обработаны только первые 20.');
+            selectedFiles = selectedFiles.slice(0, 20);
+        }
+        
+        // Обновляем текст с количеством файлов и активируем кнопку
+        if (selectedFiles.length > 0) {
+            fileCountLabel.textContent = `Выбрано файлов: ${selectedFiles.length}`;
+            convertBtn.disabled = false;
+            convertBtn.textContent = 'Конвертировать и сохранить';
+        } else {
+            fileCountLabel.textContent = 'Файлы не выбраны';
+            convertBtn.disabled = true;
+        }
+    });
+
+    // Функция для вывода логов на экран
+    function log(msg, type = 'info') {
+        logArea.style.display = 'block';
+        const div = document.createElement('div');
+        div.textContent = msg;
+        div.className = `log-entry ${type}`;
+        logArea.appendChild(div);
+        logArea.scrollTop = logArea.scrollHeight;
+    }
+
+    // Логика конвертации по клику на кнопку
+    convertBtn.addEventListener('click', async () => {
+        if (selectedFiles.length === 0) return;
+
+        convertBtn.disabled = true;
+        convertBtn.textContent = 'Идет обработка...';
+        logArea.innerHTML = ''; // Очистка логов перед новым стартом
+        log('▶ Начало конвертации...', 'info');
+
+        const supportsFileSystemAccess = 'showDirectoryPicker' in window;
+        let dirHandle = null;
+        let zip = null;
+
+        // 1. Попытка получить доступ к папке (только для Chrome/Edge/Opera)
+        if (supportsFileSystemAccess) {
+            try {
+                // Запрашиваем папку для сохранения
+                dirHandle = await window.showDirectoryPicker({ mode: 'readwrite' });
+                log('📁 Папка для сохранения выбрана.', 'success');
+            } catch (error) {
+                if (error.name === 'AbortError') {
+                    log('⚠ Выбор папки отменен пользователем.', 'info');
+                    convertBtn.disabled = false;
+                    convertBtn.textContent = 'Конвертировать и сохранить';
+                    return;
+                }
+                log(`ℹ Не удалось получить доступ к папке (${error.message}). Переключаемся на ZIP-архив.`, 'info');
+                dirHandle = null; // Сброс, чтобы пойти по пути ZIP
+            }
+        }
+        
+        // Если доступ к папке не получен или не поддерживается, готовим ZIP
+        if (!dirHandle) {
+            log('ℹ Сохранение будет выполнено в виде ZIP-архива.', 'info');
+            zip = new JSZip();
+        }
+
+        // 2. Обработка файлов
+        let successCount = 0;
+
+        for (let i = 0; i < selectedFiles.length; i++) {
+            const file = selectedFiles[i];
+            const newName = file.name.replace(/\.docx$/i, '.txt');
+            log(`⏳ [${i + 1}/${selectedFiles.length}] Чтение: ${file.name}...`);
+            
+            try {
+                const arrayBuffer = await file.arrayBuffer();
+                
+                // Конвертация
+                const result = await mammoth.extractRawText({ arrayBuffer: arrayBuffer });
+                let text = result.value;
+
+                // Добавляем BOM (Byte Order Mark), чтобы Windows понимала кириллицу
+                const bom = '\uFEFF';
+                const blobContent = bom + text;
+
+                if (dirHandle) {
+                    // Прямое сохранение в папку
+                    const fileHandle = await dirHandle.getFileHandle(newName, { create: true });
+                    const writable = await fileHandle.createWritable();
+                    await writable.write(blobContent);
+                    await writable.close();
+                    log(`✅ Сохранено: ${newName}`, 'success');
+                } else if (zip) {
+                    // Добавление в архив
+                    zip.file(newName, blobContent);
+                    log(`✅ Добавлено в архив: ${newName}`, 'success');
+                }
+                
+                if (result.messages.length > 0) {
+                    log(`⚠ Предупреждения для ${file.name}: ${result.messages.map(m => m.message).join(', ')}`, 'info');
+                }
+                
+                successCount++;
+
+            } catch (err) {
+                log(`❌ Ошибка при обработке ${file.name}: ${err.message}`, 'error');
+            }
+        }
+
+        // 3. Скачивание архива (если не использовалась папка)
+        if (zip && successCount > 0) {
+            log('📦 Формирование и скачивание ZIP архива...', 'info');
+            try {
+                const blob = await zip.generateAsync({ type: "blob" });
+                const link = document.createElement('a');
+                link.href = URL.createObjectURL(blob);
+                link.download = 'Converted_TXTs.zip';
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                log('✅ ZIP архив успешно скачан.', 'success');
+            } catch (err) {
+                log(`❌ Ошибка формирования ZIP: ${err.message}`, 'error');
+            }
+        }
+
+        log('🎉 Все операции завершены!', 'success');
+        
+        // 4. Сброс интерфейса
+        setTimeout(() => {
+            fileInput.value = ''; // Сброс value input'а, чтобы можно было выбрать те же файлы снова
+            selectedFiles = [];
+            fileCountLabel.textContent = 'Файлы обработаны. Выберите новые.';
+            convertBtn.textContent = 'Готово (выбрать новые файлы)';
+            convertBtn.disabled = true; 
+            // Кнопка разблокируется, когда пользователь выберет новые файлы через input
+        }, 1000);
+    });
+</script>
+
+</body>
+</html>

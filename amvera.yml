@@ -1,0 +1,8 @@
+meta:
+  environment: python
+  toolVersion: 3.11
+  toolchain:
+    name: pip
+run:
+  containerPort: 8000
+  command: uvicorn main:app --host 0.0.0.0 --port 8000
